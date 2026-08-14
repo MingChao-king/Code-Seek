@@ -1,0 +1,76 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "PingFang SC, Microsoft YaHei, Arial, sans-serif",
+    "primaryColor": "#EAF2FF",
+    "primaryTextColor": "#17233D",
+    "primaryBorderColor": "#4C78A8",
+    "lineColor": "#52606D",
+    "secondaryColor": "#EEF9F3",
+    "tertiaryColor": "#FFF7E6",
+    "clusterBkg": "#FAFBFD",
+    "clusterBorder": "#AAB7C4"
+  },
+  "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48}
+}}%%
+flowchart LR
+    subgraph USER["用户层"]
+        direction TB
+        U["用户<br/>通过终端 / 后续界面<br/>输入、反馈、确认并查看过程"]
+    end
+
+    subgraph ENTRY["入口层：把原始输入装配成一次可执行会话"]
+        direction TB
+        CFG["配置加载"]
+        LOAD["Model、Environment<br/>与工具加载"]
+        MSG["会话恢复与消息包装"]
+    end
+
+    subgraph EXEC["执行层"]
+        direction LR
+        subgraph AGENT["单一 AssistantAgent：组织完整交互过程"]
+            direction TB
+            LOOP["回合循环<br/>接收消息、控制预算与结束条件"]
+            CTX["上下文管理<br/>构建本次模型可见内容"]
+            TOOL["工具调度<br/>校验、确认、调用、回传结果"]
+            STATE["状态与事件<br/>保存会话、记录并输出过程"]
+        end
+
+        MODEL["Model<br/>理解上下文，返回回答或工具调用"]
+        ENV["Environment / 外部能力<br/>执行 Bash、搜索或其他工具"]
+        OUT["对外输出<br/>最终回答、确认请求、结构化过程事件"]
+    end
+
+    U -->|"启动参数"| CFG
+    U -->|"本轮消息 / 确认反馈"| MSG
+    CFG --> LOAD
+    CFG --> MSG
+    LOAD -->|"已装配组件"| LOOP
+    MSG -->|"会话消息"| LOOP
+
+    LOOP --> CTX
+    STATE -->|"历史、摘要、运行事实"| CTX
+    CTX -->|"系统指令 + 会话视图 + 工具说明"| MODEL
+    MODEL -->|"直接回答"| STATE
+
+    MODEL -->|"工具调用"| TOOL
+    TOOL -->|"合法调用"| ENV
+    ENV -->|"执行结果"| TOOL
+    TOOL -->|"观察结果，进入下一轮"| LOOP
+
+    LOOP --> STATE
+    TOOL -.->|"需要确认时"| OUT
+    STATE -->|"回答与过程"| OUT
+
+    classDef user fill:#F2EDFF,stroke:#7656A6,color:#231942,stroke-width:1.5px;
+    classDef entry fill:#FFF7E6,stroke:#C58B24,color:#3A2A0A,stroke-width:1.3px;
+    classDef agent fill:#EAF2FF,stroke:#4C78A8,color:#17233D,stroke-width:1.5px;
+    classDef model fill:#EEF9F3,stroke:#3B8C6E,color:#153D2E,stroke-width:1.5px;
+    classDef env fill:#FFF0F0,stroke:#B45D5D,color:#4A1F1F,stroke-width:1.5px;
+
+    class U user;
+    class CFG,LOAD,MSG entry;
+    class LOOP,CTX,TOOL,STATE agent;
+    class MODEL model;
+    class ENV env;
+    class OUT user;
