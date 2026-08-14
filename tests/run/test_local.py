@@ -1,61 +1,52 @@
-import re
 from unittest.mock import patch
 
 from minisweagent.models.test_models import DeterministicModel, make_output
 from minisweagent.run.mini import DEFAULT_CONFIG_FILE, main
-from tests.conftest import assert_observations_match
 
 
-def _make_model_from_fixture(text_outputs: list[str], cost_per_call: float = 1.0, **kwargs) -> DeterministicModel:
-    """Create a DeterministicModel from trajectory fixture data (raw text outputs)."""
-
-    def parse_command(text: str) -> list[dict]:
-        match = re.search(r"```mswea_bash_command\s*\n(.*?)\n```", text, re.DOTALL)
-        return [{"command": match.group(1)}] if match else []
-
-    return DeterministicModel(
-        outputs=[make_output(text, parse_command(text), cost=cost_per_call) for text in text_outputs],
-        cost_per_call=cost_per_call,
-        **kwargs,
+def test_local_end_to_end_uses_native_tool_loop_and_persists_session(tmp_path):
+    model = DeterministicModel(
+        outputs=[
+            make_output(
+                "先读取实际值。",
+                [
+                    {
+                        "tool_call_id": "call-local",
+                        "name": "bash",
+                        "command": "printf 'hello world'",
+                        "purpose": "读取测试值",
+                    }
+                ],
+            ),
+            make_output("读取完成：hello world"),
+        ]
     )
-
-
-def test_local_end_to_end(local_test_data):
-    """Test the complete flow from CLI to final result using real environment but deterministic model"""
-
-    model_responses = local_test_data["model_responses"]
-    expected_observations = local_test_data["expected_observations"]
-
+    session_dir = tmp_path / "sessions"
     with (
         patch("minisweagent.run.mini.configure_if_first_time"),
-        patch("minisweagent.models.litellm_model.LitellmModel") as mock_model_class,
-        patch("minisweagent.agents.utils.prompt_user.prompt_session.prompt", side_effect=lambda *a, **kw: ""),
-        patch(
-            "minisweagent.agents.utils.prompt_user._multiline_prompt_session.prompt", side_effect=lambda *a, **kw: ""
-        ),
-        patch("builtins.input", return_value=""),  # For LimitsExceeded handling
+        patch("minisweagent.run.mini.get_model", return_value=model),
     ):
-        mock_model_class.return_value = _make_model_from_fixture(model_responses)
         agent = main(
-            model_name="tardis",
-            config_spec=[str(DEFAULT_CONFIG_FILE)],
-            yolo=True,
-            task="Blah blah blah",
-            output=None,
-            cost_limit=10,
-            model_class=None,
-            agent_class=None,
-            environment_class=None,
-        )  # type: ignore
+            model_name="deterministic",
+            model_class="deterministic",
+            environment_class="local",
+            task="读取 hello world",
+            auto_approve=True,
+            resume=None,
+            sessions=False,
+            workspace=tmp_path,
+            config_spec=[
+                str(DEFAULT_CONFIG_FILE),
+                f"session.directory={session_dir}",
+                "events.sinks=[]",
+            ],
+        )
 
     assert agent is not None
-    messages = agent.messages
-
-    # Verify we have the right number of messages
-    # Should be: system + user (initial) + (assistant + user) * number_of_steps
-    expected_total_messages = 2 + (len(model_responses) * 2)
-    assert len(messages) == expected_total_messages, f"Expected {expected_total_messages} messages, got {len(messages)}"
-
-    assert_observations_match(expected_observations, messages)
-
-    assert agent.n_calls == len(model_responses), f"Expected {len(model_responses)} steps, got {agent.n_calls}"
+    assert [message.role for message in agent.session.messages] == ["user", "assistant", "tool", "assistant"]
+    assert agent.session.messages[-1].content == "读取完成：hello world"
+    assert len(model.queries) == 2
+    assert any(session_dir.glob("ses_*.json"))
+    tool_result = agent.session.messages[2]
+    assert tool_result.tool_call_id == "call-local"
+    assert "hello world" in tool_result.content

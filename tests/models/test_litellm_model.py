@@ -1,96 +1,147 @@
-from unittest.mock import MagicMock, patch
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
 
 import pytest
 
-from minisweagent.exceptions import FormatError
-from minisweagent.models.litellm_model import LitellmModel, LitellmModelConfig
-from minisweagent.models.utils.actions_toolcall import BASH_TOOL
+from minisweagent.agents.schema import ModelMessage, ToolSpec
+from minisweagent.exceptions import ModelProtocolError
+from minisweagent.models.litellm_model import LitellmModel
 
 
-class TestLitellmModelConfig:
-    def test_default_format_error_template(self):
-        assert LitellmModelConfig(model_name="test").format_error_template == "{{ error }}"
+def api_response(*, content: str = "", tool_calls: list | None = None, finish_reason: str = "stop"):
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=content, tool_calls=tool_calls or []),
+                finish_reason=finish_reason,
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=12, completion_tokens=3),
+    )
 
 
-def _mock_litellm_response(tool_calls):
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock()]
-    mock_response.choices[0].message.tool_calls = tool_calls
-    mock_response.choices[0].message.model_dump.return_value = {"role": "assistant", "content": None}
-    mock_response.model_dump.return_value = {}
-    return mock_response
+def api_tool_call(call_id: str, name: str, arguments: str):
+    return SimpleNamespace(
+        id=call_id,
+        function=SimpleNamespace(name=name, arguments=arguments),
+    )
 
 
-class TestLitellmModel:
-    @patch("minisweagent.models.litellm_model.litellm.completion")
-    @patch("minisweagent.models.litellm_model.litellm.cost_calculator.completion_cost")
-    def test_query_includes_bash_tool(self, mock_cost, mock_completion):
-        tool_call = MagicMock()
-        tool_call.function.name = "bash"
-        tool_call.function.arguments = '{"command": "echo test"}'
-        tool_call.id = "call_1"
-        mock_completion.return_value = _mock_litellm_response([tool_call])
-        mock_cost.return_value = 0.001
+class CapturingModel(LitellmModel):
+    def __init__(self, response, **kwargs):
+        self.response = response
+        self.requests = []
+        super().__init__(**kwargs)
 
-        model = LitellmModel(model_name="gpt-4")
-        model.query([{"role": "user", "content": "test"}])
+    def _query(self, messages, kwargs, on_text_delta):
+        self.requests.append((messages, kwargs))
+        if on_text_delta is not None and self.response.choices[0].message.content:
+            on_text_delta(self.response.choices[0].message.content)
+        return self.response
 
-        mock_completion.assert_called_once()
-        assert mock_completion.call_args.kwargs["tools"] == [BASH_TOOL]
+    def _calculate_cost(self, response):
+        return 0.25
 
-    @patch("minisweagent.models.litellm_model.litellm.completion")
-    @patch("minisweagent.models.litellm_model.litellm.cost_calculator.completion_cost")
-    def test_parse_actions_valid_tool_call(self, mock_cost, mock_completion):
-        tool_call = MagicMock()
-        tool_call.function.name = "bash"
-        tool_call.function.arguments = '{"command": "ls -la"}'
-        tool_call.id = "call_abc"
-        mock_completion.return_value = _mock_litellm_response([tool_call])
-        mock_cost.return_value = 0.001
 
-        model = LitellmModel(model_name="gpt-4")
-        result = model.query([{"role": "user", "content": "list files"}])
-        assert result["extra"]["actions"] == [{"command": "ls -la", "tool_call_id": "call_abc"}]
+def test_query_accepts_plain_text_and_does_not_impose_default_output_limit():
+    deltas = []
+    model = CapturingModel(api_response(content="answer"), model_name="deepseek/deepseek-v4-flash")
+    result = model.query(
+        [ModelMessage(role="user", content="question")],
+        tools=[],
+        max_output_tokens=None,
+        available_output_tokens=100,
+        timeout_seconds=None,
+        on_text_delta=deltas.append,
+    )
+    assert result.content == "answer"
+    assert result.tool_calls == []
+    assert result.usage.input_tokens == 12
+    assert result.usage.output_tokens == 3
+    assert result.usage.cost == 0.25
+    assert deltas == ["answer"]
+    assert "max_tokens" not in model.requests[0][1]
+    assert "tools" not in model.requests[0][1]
 
-    @patch("minisweagent.models.litellm_model.litellm.completion")
-    @patch("minisweagent.models.litellm_model.litellm.cost_calculator.completion_cost")
-    def test_parse_actions_no_tool_calls_raises(self, mock_cost, mock_completion):
-        mock_completion.return_value = _mock_litellm_response(None)
-        mock_cost.return_value = 0.001
 
-        model = LitellmModel(model_name="gpt-4")
-        with pytest.raises(FormatError):
-            model.query([{"role": "user", "content": "test"}])
+def test_query_sends_dynamic_tools_and_normalizes_native_calls():
+    response = api_response(
+        content="checking",
+        tool_calls=[api_tool_call("call-1", "bash", json.dumps({"command": "pwd"}))],
+        finish_reason="tool_calls",
+    )
+    model = CapturingModel(
+        response,
+        model_name="example/model",
+        capabilities={"context_window": 1000, "max_output_tokens": 400},
+    )
+    tool = ToolSpec(
+        name="bash",
+        description="run",
+        parameters={"type": "object", "properties": {"command": {"type": "string"}}},
+    )
+    result = model.query(
+        [ModelMessage(role="user", content="pwd")],
+        tools=[tool],
+        max_output_tokens=500,
+        available_output_tokens=300,
+        timeout_seconds=5,
+    )
+    assert result.tool_calls[0].model_dump() == {
+        "id": "call-1",
+        "name": "bash",
+        "arguments": {"command": "pwd"},
+    }
+    request_kwargs = model.requests[0][1]
+    assert request_kwargs["max_tokens"] == 300
+    assert request_kwargs["timeout"] == 5
+    assert request_kwargs["tools"][0]["function"]["name"] == "bash"
 
-    @patch("minisweagent.models.litellm_model.litellm.completion")
-    @patch("minisweagent.models.litellm_model.litellm.cost_calculator.completion_cost")
-    def test_finish_reason_threaded_into_format_error_template(self, mock_cost, mock_completion):
-        """The response finish_reason is exposed to format_error_template via template_kwargs, so a
-        config can report a max_tokens truncation instead of the misleading "no tool call" error."""
-        response = _mock_litellm_response(None)
-        response.choices[0].finish_reason = "length"
-        mock_completion.return_value = response
-        mock_cost.return_value = 0.001
 
-        model = LitellmModel(
-            model_name="gpt-4",
-            format_error_template="{% if finish_reason == 'length' %}cut off{% else %}{{ error }}{% endif %}",
+@pytest.mark.parametrize(
+    "calls",
+    [
+        [api_tool_call("", "bash", "{}")],
+        [api_tool_call("same", "bash", "{}"), api_tool_call("same", "bash", "{}")],
+        [api_tool_call("bad-json", "bash", "{")],
+        [api_tool_call("array", "bash", "[]")],
+    ],
+)
+def test_invalid_native_tool_calls_are_protocol_errors(calls):
+    model = CapturingModel(api_response(tool_calls=calls), model_name="example/model")
+    with pytest.raises(ModelProtocolError):
+        model.query(
+            [ModelMessage(role="user", content="go")],
+            tools=[],
+            max_output_tokens=None,
+            available_output_tokens=None,
+            timeout_seconds=None,
         )
-        with pytest.raises(FormatError) as exc:
-            model.query([{"role": "user", "content": "test"}])
-        assert exc.value.messages[0]["content"] == "cut off"
 
-    def test_format_observation_messages(self):
-        model = LitellmModel(model_name="gpt-4", observation_template="{{ output.output }}")
-        message = {"extra": {"actions": [{"command": "echo test", "tool_call_id": "call_1"}]}}
-        outputs = [{"output": "test output", "returncode": 0}]
-        result = model.format_observation_messages(message, outputs)
-        assert len(result) == 1
-        assert result[0]["role"] == "tool"
-        assert result[0]["tool_call_id"] == "call_1"
-        assert result[0]["content"] == "test output"
 
-    def test_format_observation_messages_no_actions(self):
-        model = LitellmModel(model_name="gpt-4")
-        result = model.format_observation_messages({"extra": {}}, [])
-        assert result == []
+def test_deepseek_v4_flash_has_known_provider_capabilities():
+    model = CapturingModel(api_response(content="ok"), model_name="deepseek/deepseek-v4-flash")
+    assert model.capabilities.context_window == 1_000_000
+    assert model.capabilities.max_output_tokens == 393_216
+    assert model.capabilities.context_window_source == "provider"
+    assert model.capabilities.cost_tracking_supported is True
+
+
+def test_deepseek_v4_uses_official_encoding_and_cached_tokenizer():
+    model = CapturingModel(api_response(content="ok"), model_name="deepseek/deepseek-v4-flash")
+    tool = ToolSpec(
+        name="bash",
+        description="run a command",
+        parameters={"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]},
+    )
+    messages = [ModelMessage(role="system", content="You are helpful."), ModelMessage(role="user", content="你好")]
+    count = model.estimate_input_tokens(messages, [tool])
+    if model._deepseek_tokenizer is None:
+        pytest.skip("Official DeepSeek V4 tokenizer is not available in this environment")
+    tokenizer = model._deepseek_tokenizer
+    assert count == 273
+    assert model.estimate_input_tokens(messages, [tool]) == count
+    assert model._deepseek_tokenizer is tokenizer
+    assert model.estimate_input_tokens(messages, []) < count

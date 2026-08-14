@@ -9,10 +9,14 @@ from minisweagent.models import get_model
 
 
 def _mock_litellm_completion(response_content="```mswea_bash_command\necho test\n```"):
-    """Helper to create consistent litellm mocks. Response must include bash block for parse_action."""
+    """Helper to create a native plain-text response."""
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = response_content
+    mock_response.choices[0].message.tool_calls = []
+    mock_response.choices[0].finish_reason = "stop"
+    mock_response.usage.prompt_tokens = 10
+    mock_response.usage.completion_tokens = 2
     mock_response.model_dump.return_value = {"mock": "response"}
     return mock_response
 
@@ -33,7 +37,13 @@ def test_sonnet_4_cache_control_integration():
 
             # This is the key test: get_model with anthropic name should enable cache control
             model = get_model("sonnet-4")
-            model.query(messages)
+            model.query(
+                messages,
+                tools=[],
+                max_output_tokens=256,
+                available_output_tokens=None,
+                timeout_seconds=None,
+            )
 
             # Verify that cache control was applied to the messages sent to the API
             mock_completion.assert_called_once()
@@ -85,7 +95,13 @@ def test_get_model_anthropic_applies_cache_control(model_name):
             model = get_model(model_name)
 
             # Call query with a copy of messages (to avoid mutation issues)
-            model.query(copy.deepcopy(messages))
+            model.query(
+                copy.deepcopy(messages),
+                tools=[],
+                max_output_tokens=256,
+                available_output_tokens=None,
+                timeout_seconds=None,
+            )
 
             # Verify completion was called
             mock_completion.assert_called_once()
@@ -143,7 +159,13 @@ def test_get_model_non_anthropic_no_cache_control(model_name):
             model = get_model(model_name)
 
             # Call query
-            model.query(copy.deepcopy(messages))
+            model.query(
+                copy.deepcopy(messages),
+                tools=[],
+                max_output_tokens=None,
+                available_output_tokens=None,
+                timeout_seconds=None,
+            )
 
             # Verify completion was called
             mock_completion.assert_called_once()

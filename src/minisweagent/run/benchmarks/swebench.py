@@ -17,11 +17,13 @@ from jinja2 import StrictUndefined, Template
 from rich.live import Live
 
 from minisweagent import Environment
+from minisweagent.agents import build_assistant
+from minisweagent.agents.session import SessionStore
 from minisweagent.config import builtin_config_dir, get_config_from_spec
 from minisweagent.environments import get_environment
 from minisweagent.models import get_model
 from minisweagent.run.benchmarks.utils.batch_progress import RunBatchProgressManager
-from minisweagent.run.benchmarks.utils.common import ProgressTrackingAgent
+from minisweagent.run.benchmarks.utils.common import BatchProgressSink
 from minisweagent.utils.log import add_file_handler, logger
 from minisweagent.utils.serialize import UNSET, recursive_merge
 
@@ -144,16 +146,22 @@ def process_instance(
 
     try:
         env = get_sb_environment(config, instance)
-        agent = ProgressTrackingAgent(
-            model,
-            env,
-            progress_manager=progress_manager,
-            instance_id=instance_id,
-            **config.get("agent", {}),
-        )
-        info = agent.run(task)
-        exit_status = info.get("exit_status")
-        result = info.get("submission")
+        benchmark_config = recursive_merge(config, {"agent": {"approval_policy": "auto"}})
+        store = SessionStore(instance_dir / "sessions")
+        workspace = getattr(env.config, "cwd", "/")
+        with store.create(workspace) as session:
+            agent = build_assistant(
+                model,
+                env,
+                session,
+                store,
+                benchmark_config,
+                event_sinks=[BatchProgressSink(progress_manager, instance_id)],
+            )
+            agent.receive(task)
+            patch = env.execute({"command": "git diff"}, cwd=workspace)
+            result = patch.get("output", "") if patch.get("returncode") == 0 else ""
+            exit_status = "Completed"
     except Exception as e:
         logger.error(f"Error processing instance {instance_id}: {e}", exc_info=True)
         exit_status, result = type(e).__name__, ""
@@ -161,16 +169,16 @@ def process_instance(
     finally:
         if agent is not None:
             traj_path = instance_dir / f"{instance_id}.traj.json"
-            agent.save(
-                traj_path,
-                {
-                    "info": {
-                        "exit_status": exit_status,
-                        "submission": result,
-                        **extra_info,
+            traj_path.parent.mkdir(parents=True, exist_ok=True)
+            traj_path.write_text(
+                json.dumps(
+                    {
+                        **agent.session.model_dump(mode="json"),
+                        "info": {"exit_status": exit_status, "submission": result, **extra_info},
+                        "instance_id": instance_id,
                     },
-                    "instance_id": instance_id,
-                },
+                    indent=2,
+                )
             )
             logger.info(f"Saved trajectory to '{traj_path}'")
         update_preds_file(output_dir / "preds.json", instance_id, model.config.model_name, result)

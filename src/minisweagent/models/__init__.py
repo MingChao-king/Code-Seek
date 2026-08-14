@@ -72,15 +72,13 @@ def get_model_name(input_model_name: str | None = None, config: dict | None = No
         return from_config
     if from_env := os.getenv("MSWEA_MODEL_NAME"):
         return from_env
-    raise ValueError("No default model set. Please run `mini-extra config setup` to set one.")
+    raise ValueError("No default model set. Please run `codeseek-extra config setup` to set one.")
 
 
 _MODEL_CLASS_MAPPING = {
     "litellm": "minisweagent.models.litellm_model.LitellmModel",
-    "litellm_textbased": "minisweagent.models.litellm_textbased_model.LitellmTextbasedModel",
     "litellm_response": "minisweagent.models.litellm_response_model.LitellmResponseModel",
     "openrouter": "minisweagent.models.openrouter_model.OpenRouterModel",
-    "openrouter_textbased": "minisweagent.models.openrouter_textbased_model.OpenRouterTextbasedModel",
     "openrouter_response": "minisweagent.models.openrouter_response_model.OpenRouterResponseModel",
     "portkey": "minisweagent.models.portkey_model.PortkeyModel",
     "portkey_response": "minisweagent.models.portkey_response_model.PortkeyResponseAPIModel",

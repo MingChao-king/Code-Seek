@@ -124,6 +124,22 @@ def test_local_environment_stderr_capture():
     assert "error message" in result["output"]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="pipe streaming uses POSIX selectors")
+def test_local_environment_streams_stdout_and_stderr_before_return():
+    env = LocalEnvironment()
+    chunks = []
+
+    result = env.execute_stream(
+        {"command": "printf first; printf error >&2; printf second"},
+        on_output=lambda stream, text: chunks.append((stream, text)),
+    )
+
+    assert result["returncode"] == 0
+    assert "first" in result["output"] and "second" in result["output"] and "error" in result["output"]
+    assert any(stream == "stdout" and "first" in text for stream, text in chunks)
+    assert any(stream == "stderr" and "error" in text for stream, text in chunks)
+
+
 def test_local_environment_timeout():
     """Test timeout functionality returns structured output instead of raising."""
     env = LocalEnvironment(timeout=1)

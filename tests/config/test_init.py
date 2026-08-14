@@ -24,7 +24,9 @@ class TestKeyValueSpecToNestedDict:
         assert _key_value_spec_to_nested_dict('key="value"') == {"key": "value"}
 
     def test_nested_single_level(self):
-        assert _key_value_spec_to_nested_dict("agent.mode=yolo") == {"agent": {"mode": "yolo"}}
+        assert _key_value_spec_to_nested_dict("agent.approval_policy=auto") == {
+            "agent": {"approval_policy": "auto"}
+        }
 
     def test_nested_multiple_levels(self):
         assert _key_value_spec_to_nested_dict("a.b.c=value") == {"a": {"b": {"c": "value"}}}
@@ -97,8 +99,8 @@ class TestGetConfigFromSpec:
     """Tests for get_config_from_spec function."""
 
     def test_uses_key_value_spec_for_equals_sign(self):
-        result = get_config_from_spec("agent.mode=yolo")
-        assert result == {"agent": {"mode": "yolo"}}
+        result = get_config_from_spec("agent.approval_policy=auto")
+        assert result == {"agent": {"approval_policy": "auto"}}
 
     def test_uses_key_value_spec_with_number(self):
         result = get_config_from_spec("model.max_tokens=500")

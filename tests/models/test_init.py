@@ -35,12 +35,12 @@ class TestGetModelName:
         """Test that ValueError is raised when no model is configured anywhere."""
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(
-                ValueError, match="No default model set. Please run `mini-extra config setup` to set one."
+                ValueError, match="No default model set. Please run `codeseek-extra config setup` to set one."
             ):
                 get_model_name(None, {})
 
             with pytest.raises(
-                ValueError, match="No default model set. Please run `mini-extra config setup` to set one."
+                ValueError, match="No default model set. Please run `codeseek-extra config setup` to set one."
             ):
                 get_model_name(None, None)
 
@@ -130,12 +130,13 @@ class TestGetModel:
     def test_get_deterministic_model(self):
         """Test that get_model can instantiate DeterministicModel via model_class parameter."""
         outputs = [make_output("hello", []), make_output("world", [])]
-        config = {"outputs": outputs, "cost_per_call": 2.0}
+        config = {"outputs": outputs, "context_window": 5000, "max_output_tokens": 1000}
         model = get_model("test-model", config | {"model_class": "deterministic"})
 
         assert isinstance(model, DeterministicModel)
         assert model.config.outputs == outputs
-        assert model.config.cost_per_call == 2.0
+        assert model.capabilities.context_window == 5000
+        assert model.capabilities.max_output_tokens == 1000
         assert model.config.model_name == "test-model"
 
 

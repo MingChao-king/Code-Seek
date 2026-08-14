@@ -52,36 +52,25 @@ def run_mini_command(extra_options: list[str]) -> subprocess.CompletedProcess:
         sys.executable,
         "-m",
         "minisweagent",
-        "--exit-immediately",
-        "-y",
-        "--cost-limit",
-        "0.03",
+        "--auto-approve",
         "-t",
         SIMPLE_TASK,
         *extra_options,
     ]
     env = os.environ.copy()
     env["MSWEA_MODEL_RETRY_STOP_AFTER_ATTEMPT"] = "8"
+    env["MSWEA_GLOBAL_COST_LIMIT"] = "0.03"
     return subprocess.run(cmd, timeout=120, env=env)
 
 
 # =============================================================================
-# LiteLLM Models (default, toolcall, response_toolcall)
+# LiteLLM models
 # =============================================================================
 
 
 @requires_openai
-def test_litellm_textbased():
-    """Test with litellm_textbased model class."""
-    result = run_mini_command(
-        ["--model", "openai/gpt-5-mini", "--model-class", "litellm_textbased", "-c", "mini_textbased"]
-    )
-    assert result.returncode == 0
-
-
-@requires_openai
-def test_litellm_toolcall():
-    """Test with litellm_toolcall model class."""
+def test_litellm():
+    """Test the normalized LiteLLM adapter."""
     result = run_mini_command(["--model", "openai/gpt-5.2"])
     assert result.returncode == 0
 
@@ -101,17 +90,8 @@ def test_litellm_response_toolcall():
 
 
 # =============================================================================
-# OpenRouter Models
+# OpenRouter models
 # =============================================================================
-
-
-@requires_openrouter
-def test_openrouter_textbased():
-    """Test with openrouter_textbased model class."""
-    result = run_mini_command(
-        ["--model", "anthropic/claude-sonnet-4", "--model-class", "openrouter_textbased", "-c", "mini_textbased"]
-    )
-    assert result.returncode == 0
 
 
 @requires_openrouter

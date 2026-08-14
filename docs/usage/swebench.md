@@ -85,9 +85,6 @@
             -i 0  # instance index
         ```
 
-        Note: If you want to run the script without prompting for confirmation at exit,
-        add the `--exit-immediately` flag.
-
         Basic flags:
 
         - `-m`, `--model` - Model to use
@@ -103,7 +100,7 @@
         Advanced flags:
 
         - `--environment-class` - Environment type to use (recommended: `docker` or `singularity`)
-        - `--exit-immediately` - Exit immediately when the agent wants to finish instead of prompting (default: `False`)
+        The single-instance runner uses the benchmark configuration's `auto` approval policy and exits after the Agent's final response.
 
 !!! tip "Evaluating on SWE-bench"
 
@@ -143,8 +140,7 @@ See [global configuration](../advanced/global_configuration.md) for more details
 
 > What happens to uncompleted tasks when I abort with KeyboardInterrupt?
 
-Trajectories are only saved upon completion, so most likely, you can just rerun the script to complete the tasks next time.
-However, you should still check for `KeyboardInterrupt` in `preds.json` in case some tasks were aborted but saved.
+Each instance uses a persistent Session and writes its final trajectory snapshot when the runner exits. External calls have intent checkpoints and are not replayed automatically after an unknown result; inspect the saved status before rerunning an interrupted instance.
 
 > Certain tasks are being stuck even though I deleted the trajectories.
 

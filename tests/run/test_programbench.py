@@ -14,11 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-from pydantic import BaseModel
 
 from minisweagent import package_dir
 from minisweagent.environments.docker import DockerEnvironment
-from minisweagent.exceptions import Submitted
+from minisweagent.models.test_models import DeterministicModel, make_output
 from minisweagent.run.benchmarks.programbench import copy_submission, main
 
 # Lightweight image used for the real-docker tests. Already cached on machines
@@ -152,35 +151,9 @@ def test_real_programbench_api_contract():
 # ---------------------------------------------------------------------------
 
 
-class _SubmittingModelConfig(BaseModel):
-    model_name: str = "submitting_model"
-
-
-class _SubmittingModel:
-    """Test model whose ``query`` raises ``Submitted`` so the agent exits cleanly on step 1."""
-
-    def __init__(self):
-        self.cost = 0.0
-        self.n_calls = 0
-        self.config = _SubmittingModelConfig()
-
-    def query(self, *args, **kwargs):
-        self.n_calls += 1
-        raise Submitted(
-            {"role": "exit", "content": "Submitted", "extra": {"exit_status": "Submitted", "submission": "done"}}
-        )
-
-    def format_message(self, **kwargs) -> dict:
-        return dict(**kwargs)
-
-    def format_observation_messages(self, message, outputs, template_vars=None) -> list[dict]:
-        return [self.format_message(role="user", content=str(o)) for o in outputs]
-
-    def get_template_vars(self, **kwargs) -> dict:
-        return self.config.model_dump() | {"n_model_calls": self.n_calls, "model_cost": self.cost}
-
-    def serialize(self) -> dict:
-        return {"info": {"model_stats": {"instance_cost": self.cost, "api_calls": self.n_calls}}}
+def _final_model() -> DeterministicModel:
+    """Return a native-protocol model that closes the benchmark turn with text."""
+    return DeterministicModel(outputs=[make_output("Implementation complete and ready for evaluation.")])
 
 
 @pytest.mark.slow
@@ -191,7 +164,7 @@ def test_programbench_end_to_end_real_docker(real_programbench_first_instance, t
     # CI runners may not have. Override run_args with the bare minimum (keeping
     # ``--network none`` since the agent is supposed to run offline).
     run_args_override = 'environment.run_args=["--rm", "--network", "none"]'
-    with patch("minisweagent.run.benchmarks.programbench.get_model", side_effect=lambda **kw: _SubmittingModel()):
+    with patch("minisweagent.run.benchmarks.programbench.get_model", side_effect=lambda **kw: _final_model()):
         main(
             slice_spec="",
             filter_spec=f"^{instance['instance_id']}$",
@@ -219,7 +192,7 @@ def test_programbench_end_to_end_real_docker(real_programbench_first_instance, t
     assert traj.exists()
     data = json.loads(traj.read_text())
     assert data["instance_id"] == iid
-    assert data["info"]["exit_status"] == "Submitted"
+    assert data["info"]["exit_status"] == "Completed"
 
 
 @pytest.mark.slow

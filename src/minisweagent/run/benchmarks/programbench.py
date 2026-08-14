@@ -2,6 +2,7 @@
 
 import concurrent.futures
 import copy
+import json
 import subprocess
 import time
 import traceback
@@ -10,11 +11,13 @@ from pathlib import Path
 import typer
 from rich.live import Live
 
+from minisweagent.agents import build_assistant
+from minisweagent.agents.session import SessionStore
 from minisweagent.config import builtin_config_dir, get_config_from_spec
 from minisweagent.environments import get_environment
 from minisweagent.models import get_model
 from minisweagent.run.benchmarks.utils.batch_progress import RunBatchProgressManager
-from minisweagent.run.benchmarks.utils.common import ProgressTrackingAgent
+from minisweagent.run.benchmarks.utils.common import BatchProgressSink
 from minisweagent.utils.log import add_file_handler, logger
 from minisweagent.utils.serialize import UNSET, recursive_merge
 
@@ -28,19 +31,6 @@ DEFAULT_CONFIG_FILE = builtin_config_dir / "benchmarks" / "programbench.yaml"
 _IMAGE_TAG = "task_cleanroom_v6"
 
 app = typer.Typer(rich_markup_mode="rich", add_completion=False)
-
-
-class ProgramBenchAgent(ProgressTrackingAgent):
-    """Drops ``raw_output`` from tool-result messages to avoid bloating trajectories."""
-
-    def serialize(self, *extra_dicts) -> dict:
-        data = super().serialize(*extra_dicts)
-        for msg in data.get("messages", []):
-            extra = msg.get("extra", {})
-            extra.pop("raw_output", None)
-            for obs in extra.get("observations", []):
-                obs.pop("raw_output", None)
-        return data
 
 
 def copy_submission(env, dest: Path, *, src: str = "/workspace") -> None:
@@ -88,18 +78,23 @@ def process_instance(
             {"command": 'git config user.name "mini-swe-agent" && git config user.email "mini-swe-agent@proton.me"'}
         )
 
-        agent_config = dict(inst_config.get("agent", {}))
-        agent_config["output_path"] = str(instance_dir / f"{iid}.traj.json")
-        agent = ProgramBenchAgent(
-            model,
-            env,
-            progress_manager=progress_manager,
-            instance_id=iid,
-            **agent_config,
-        )
-        agent.extra_template_vars = {"instance": instance}
-        info = agent.run()
-        exit_status = info.get("exit_status")
+        benchmark_config = recursive_merge(inst_config, {"agent": {"approval_policy": "auto"}})
+        store = SessionStore(instance_dir / "sessions")
+        workspace = getattr(env.config, "cwd", "/workspace")
+        with store.create(workspace) as session:
+            agent = build_assistant(
+                model,
+                env,
+                session,
+                store,
+                benchmark_config,
+                event_sinks=[BatchProgressSink(progress_manager, iid)],
+            )
+            agent.receive(
+                "Implement an original codebase in this workspace that reproduces the documented behavior of ./executable. "
+                "Follow all reverse-engineering restrictions in the system instructions, create ./compile.sh, and verify the result."
+            )
+            exit_status = "Completed"
     except Exception as e:
         logger.error(f"Error processing instance {iid}: {e}", exc_info=True)
         exit_status = type(e).__name__
@@ -107,12 +102,22 @@ def process_instance(
     finally:
         if agent is not None:
             try:
-                copy_submission(agent.env, instance_dir / "submission.tar.gz")
+                copy_submission(env, instance_dir / "submission.tar.gz")
             except Exception as e:
                 logger.error(f"Failed to copy submission for {iid}: {e}", exc_info=True)
                 extra_info["submission_copy_error"] = str(e)
             traj_path = instance_dir / f"{iid}.traj.json"
-            agent.save(traj_path, {"info": {"exit_status": exit_status, **extra_info}, "instance_id": iid})
+            traj_path.parent.mkdir(parents=True, exist_ok=True)
+            traj_path.write_text(
+                json.dumps(
+                    {
+                        **agent.session.model_dump(mode="json"),
+                        "info": {"exit_status": exit_status, **extra_info},
+                        "instance_id": iid,
+                    },
+                    indent=2,
+                )
+            )
             logger.info(f"Saved trajectory to '{traj_path}'")
         progress_manager.on_instance_end(iid, exit_status)
 

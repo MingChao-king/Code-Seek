@@ -38,7 +38,11 @@ def test_swebench_end_to_end(github_test_data, tmp_path, workers, container_exec
 
     model_responses = github_test_data["model_responses"]
 
-    with patch("minisweagent.run.benchmarks.swebench.get_model") as mock_get_model:
+    dataset = [{"instance_id": "swe-agent__test-repo-1", "problem_statement": "test"}]
+    with (
+        patch("minisweagent.run.benchmarks.swebench.get_model") as mock_get_model,
+        patch("datasets.load_dataset", return_value=dataset),
+    ):
         # Use side_effect to create a new model instance for each worker
         mock_get_model.side_effect = lambda **kwargs: _make_model_from_fixture(model_responses, cost_per_call=0.1)
 
@@ -354,7 +358,11 @@ def test_redo_existing_false_skips_existing(github_test_data, tmp_path):
     }
     preds_file.write_text(json.dumps(existing_data))
 
-    with patch("minisweagent.run.benchmarks.swebench.get_model") as mock_get_model:
+    dataset = [{"instance_id": "swe-agent__test-repo-1", "problem_statement": "test"}]
+    with (
+        patch("minisweagent.run.benchmarks.swebench.get_model") as mock_get_model,
+        patch("datasets.load_dataset", return_value=dataset),
+    ):
         mock_get_model.side_effect = lambda **kwargs: _make_model_from_fixture(model_responses)
 
         main(
@@ -461,7 +469,7 @@ class ExceptionModel:
 @pytest.mark.slow
 @pytest.mark.parametrize("workers", [1, 2])
 def test_exception_handling_in_agent_run(tmp_path, workers, container_executable):
-    """Test that exceptions during agent.run() are properly handled and recorded"""
+    """Test that exceptions during AssistantAgent.receive() are handled and recorded."""
     with patch("minisweagent.run.benchmarks.swebench.get_model") as mock_get_model:
         mock_get_model.return_value = ExceptionModel(RuntimeError, "Agent processing failed")
 

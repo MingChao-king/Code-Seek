@@ -38,7 +38,7 @@ def sample_simple_trajectory():
         {"role": "user", "content": "Command output here."},
         {
             "role": "assistant",
-            "content": "Now I'll finish.\n\n```mswea_bash_command\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```",
+            "content": "Now I'll finish with a normal final response.",
         },
     ]
 
@@ -49,7 +49,7 @@ def sample_swebench_trajectory():
     return {
         "instance_id": "test-instance-1",
         "info": {
-            "exit_status": "Submitted",
+            "exit_status": "Completed",
             "submission": "Fixed the issue",
             "model_stats": {"instance_cost": 0.05, "api_calls": 3},
         },
@@ -60,7 +60,7 @@ def sample_swebench_trajectory():
             {"role": "user", "content": [{"type": "text", "text": "File contents here."}]},
             {
                 "role": "assistant",
-                "content": "Fixed!\n\n```mswea_bash_command\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```",
+                "content": "Fixed and verified.",
             },
         ],
     }
@@ -144,7 +144,7 @@ async def test_trajectory_inspector_basic_navigation(temp_trajectory_files):
         await pilot.press("$")
         assert "Step 3/3" in app.title
         assert "ASSISTANT" in get_screen_text(app)
-        assert "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" in get_screen_text(app)
+        assert "normal final response" in get_screen_text(app)
 
         # Navigate back to first step
         await pilot.press("0")

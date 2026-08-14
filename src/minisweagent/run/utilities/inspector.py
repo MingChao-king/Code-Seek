@@ -23,13 +23,13 @@ from minisweagent.models.utils.content_string import get_content_string
 
 
 def _messages_to_steps(messages: list[dict]) -> list[list[dict]]:
-    """Group messages into "pages" as shown by the UI."""
+    """Group each assistant decision with the tool results it produced."""
     steps = []
     current_step = []
     for message in messages:
-        # Start new step with new tool uses
-        if message.get("extra", {}).get("actions") or message.get("role") == "assistant":
-            steps.append(current_step)
+        if message.get("role") == "assistant":
+            if current_step:
+                steps.append(current_step)
             current_step = [message]
         else:
             current_step.append(message)

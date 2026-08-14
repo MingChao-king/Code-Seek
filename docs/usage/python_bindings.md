@@ -1,30 +1,16 @@
 # Python bindings
 
-!!! abstract "Overview"
-
-    This page shows the most basic example of how to use mini-SWE-agent as a Python library.
-    For more advanced usage, subclassing, and mix & match of components, see [subclassing and more](../advanced/cookbook.md).
-
-## Hello world
+The smallest binding example uses the same `AssistantAgent` as the CLI:
 
 ```python
-import logging
+from minisweagent.run.hello_world import main
 
-from minisweagent.agents.default import DefaultAgent
-from minisweagent.models import get_model
-from minisweagent.environments.local import LocalEnvironment
-
-logging.basicConfig(level=logging.DEBUG)
-task = "Write a hello world program"
-model_name = "anthropic/claude-sonnet-4-5-20250929"
-
-agent = DefaultAgent(
-    get_model(input_model_name=model_name),
-    LocalEnvironment(),
+agent = main(
+    task="Write and verify a hello world program",
+    model_name="deepseek/deepseek-v4-flash",
 )
-
-# Run the agent
-agent.run(task)
 ```
+
+For custom tools, event sinks, session locations, or environments, compose the Agent with `build_assistant()` as shown in the [extension guide](../advanced/cookbook.md). Send later messages with `agent.receive(text)` while the session lease remains open; for long-lived applications, keep the `SessionStore.resume(session_id)` context manager open for the lifetime of that conversation owner.
 
 {% include-markdown "../_footer.md" %}

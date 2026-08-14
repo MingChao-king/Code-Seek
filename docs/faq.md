@@ -30,9 +30,8 @@
 
     `mini` is simpler than `swe-agent` because it:
 
-    - Does not have any tools other than bash — it doesn't even use the tool-calling interface of the LMs.
-      This means you don't have to install anything in any environment you're running in. `bash` is all you need.
-    - Has a completely linear history — every step of the agent just appends to the messages and that's it.
+    - Uses a small native tool surface, with Bash as the general execution primitive.
+    - Keeps a complete persistent session while building a bounded ContextView from active memory and recent raw turns.
     - Executes actions with `subprocess.run` — every action is completely independent (as opposed to keeping a stateful shell session running).
       This [avoids so many issues](#why-no-shell-session), trust me.
 

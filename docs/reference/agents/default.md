@@ -1,31 +1,17 @@
-# DefaultAgent
+# AssistantAgent
 
-!!! note "DefaultAgent class"
+CodeSeek contains one built-in Agent implementation. It accepts free-form messages, obtains native model decisions, executes registered tools with approval and durable checkpoints, and completes a turn only on a final text response without ToolCalls.
 
-    - [Read on GitHub](https://github.com/swe-agent/mini-swe-agent/blob/main/src/minisweagent/agents/default.py)
+See the [control-flow guide](../../advanced/control_flow.md) before using the API directly.
 
-    ??? note "Full source code"
+::: minisweagent.agents.assistant.AgentConfig
 
-        ```python
-        --8<-- "src/minisweagent/agents/default.py"
-        ```
+::: minisweagent.agents.assistant.AssistantAgent
 
-!!! tip "Understanding the control flow"
+::: minisweagent.agents.assistant.AgentLimitsExceeded
 
-    Check out the [control flow guide](../../advanced/control_flow.md) for a visual explanation of the agent's control flow.
+::: minisweagent.agents.session.SessionStore
 
-::: minisweagent.agents.default.AgentConfig
-
-::: minisweagent.agents.default.DefaultAgent
-
-::: minisweagent.exceptions.InterruptAgentFlow
-
-::: minisweagent.exceptions.Submitted
-
-::: minisweagent.exceptions.LimitsExceeded
-
-::: minisweagent.exceptions.FormatError
-
-::: minisweagent.exceptions.UserInterruption
+::: minisweagent.context.ContextManager
 
 {% include-markdown "../../_footer.md" %}

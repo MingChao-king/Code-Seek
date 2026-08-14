@@ -3,12 +3,14 @@ import shlex
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+pytest.importorskip("contree_sdk")
+
 from contree_sdk.config import ContreeConfig
 
 from minisweagent.environments.extra.contree import (
     ContreeEnvironment,
 )
-from minisweagent.exceptions import Submitted
 
 
 def _make_env(**kwargs) -> ContreeEnvironment:
@@ -81,8 +83,8 @@ def test_execute_exception():
     assert result["extra"]["exception_type"] == "RuntimeError"
 
 
-def test_execute_raises_submitted():
-    """Test that execute() raises Submitted when output contains the submission marker."""
+def test_execute_treats_legacy_submission_marker_as_plain_output():
+    """The environment no longer owns Agent completion semantics."""
     env = _make_env()
     _setup_session(
         env,
@@ -90,16 +92,13 @@ def test_execute_raises_submitted():
         exit_code=0,
     )
 
-    with pytest.raises(Submitted) as exc_info:
-        env.execute({"command": "submit"})
-
-    msg = exc_info.value.messages[0]
-    assert msg["extra"]["exit_status"] == "Submitted"
-    assert "diff --git" in msg["extra"]["submission"]
+    result = env.execute({"command": "submit"})
+    assert result["returncode"] == 0
+    assert "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" in result["output"]
+    assert "diff --git" in result["output"]
 
 
-def test_execute_no_submit_on_nonzero_returncode():
-    """Test that the submission marker is ignored when the command fails."""
+def test_execute_preserves_legacy_marker_on_nonzero_returncode():
     env = _make_env()
     _setup_session(env, stdout="COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n", exit_code=1)
 

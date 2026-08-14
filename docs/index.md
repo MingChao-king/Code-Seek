@@ -1,227 +1,46 @@
-<div align="center">
-<img src="assets/mini-swe-agent-banner.svg" alt="mini-swe-agent banner" style="height: 7em"/>
+# CodeSeek v0.1
 
-<h1 style="margin-bottom: 1ex;">The 100 line AI agent that's actually useful</h1>
+CodeSeek is a continuous terminal coding agent. A single `AssistantAgent` reads the conversation, answers directly when possible, and uses registered tools when facts or actions are required.
 
-</div>
+## Start
 
-<div align="center">
+```bash
+codeseek
+```
 
-<a href="https://join.slack.com/t/swe-bench/shared_invite/zt-36pj9bu5s-o3_yXPZbaH2wVnxnss1EkQ">
-    <img src="https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white" alt="Slack">
-</a>
-<a href="https://github.com/SWE-agent/mini-swe-agent">
-    <img alt="GitHub Release" src="https://img.shields.io/github/v/release/swe-agent/mini-swe-agent?style=for-the-badge&logo=github&label=GitHub&labelColor=black&color=green" alt="GitHub Release">
-</a>
-<a href="https://pypi.org/project/mini-swe-agent/">
-    <img src="https://img.shields.io/pypi/v/mini-swe-agent?style=for-the-badge&logo=python&logoColor=white&labelColor=black&color=deeppink" alt="PyPI - Version">
-</a>
+Choose a workspace:
 
-</div>
+```bash
+codeseek --workspace /path/to/repository
+```
 
-!!! warning "This is mini-swe-agent v2"
+Resume a saved conversation:
 
-    Read the [migration guide](https://mini-swe-agent.com/latest/advanced/v2_migration/). For the previous version, check out the [v1 documentation](https://mini-swe-agent.com/v1/) or the [v1 branch](https://github.com/SWE-agent/mini-swe-agent/tree/v1).
+```bash
+codeseek --resume ses_0123456789abcdef0123456789abcdef
+```
 
-In 2024, [SWE-bench](https://swebench.com) & [SWE-agent](https://swe-agent.com) helped kickstart the coding agent revolution.
+## Terminal Commands
 
-We now ask: **What if our agent was 100x simpler, and still worked nearly as well?**
+Type `/` to display command suggestions immediately, then use the up and down arrow keys to choose an action. No first Enter is required.
 
-`mini` is
+- `/compact [focus]` manually compacts eligible older history. Optional text tells the summary model what should receive special attention.
+- `/compress [focus]` remains available as a compatibility alias.
+- `/auto` enables automatic approval for the current Session.
+- `/ask` restores per-call approval.
+- `/approval` shows the current approval policy.
+- `/limit` inspects or changes user-selected limits.
+- `/memory` inspects or revises the conversation-memory tree.
+- `/exit` saves and releases the current session.
 
-- **Widely adopted**: Used by Meta, NVIDIA, Essential AI, IBM, Nebius, Anyscale, Princeton University, Stanford University, and many more.
-- **Minimal**: Just [100 lines of python](https://github.com/SWE-agent/mini-swe-agent/blob/main/src/minisweagent/agents/default.py) (+100 total for [env](https://github.com/SWE-agent/mini-swe-agent/blob/main/src/minisweagent/environments/local.py),
-[model](https://github.com/SWE-agent/mini-swe-agent/blob/main/src/minisweagent/models/litellm_model.py), [script](https://github.com/SWE-agent/mini-swe-agent/blob/main/src/minisweagent/run/hello_world.py)) — no fancy dependencies!
-- **Performant:** Scores >74% on the [SWE-bench verified benchmark](https://www.swebench.com/); starts much faster than Claude Code
-- **Deployable:** Supports **local environments**, **docker/podman**, **singularity/apptainer**, **bublewrap**, **contree**, and more
-- **Compatible:** Supports all models via **litellm**, **openrouter**, **portkey**, and more. Support for `/completion` and `/response` endpoints, interleaved thinking etc.
-- Built by the Princeton & Stanford team behind [SWE-bench](https://swebench.com), [SWE-agent](https://swe-agent.com), and more
-- **Tested:** [![Codecov](https://img.shields.io/codecov/c/github/swe-agent/mini-swe-agent?style=flat-square)](https://codecov.io/gh/SWE-agent/mini-swe-agent)
+## Core Behavior
 
-??? note "Why use mini-SWE-agent for research?"
+- One model-driven loop handles questions, planning, execution, correction, and final reporting.
+- Native tool calls are validated, approved, executed, persisted, and returned to the model.
+- Complete messages remain on disk while older active context can become an inspectable summary tree.
+- Sessions can be opened in separate terminals and resumed by ID.
+- Context usage, model activity, tool execution, approval, and compaction produce structured runtime events.
+- The current main ContextView usage and remaining capacity are shown before every input prompt.
+- The `codeseek` rename preserves the existing local Session and credential directory so conversations created earlier continue to work.
 
-    [SWE-agent](https://swe-agent.com/latest/) jump-started the development of AI agents in 2024. Back then, we placed a lot of emphasis on tools and special interfaces for the agent. However, one year later, a lot of this is not needed at all to build a useful agent!
-
-    In fact, the `mini` agent:
-
-    - **Does not have any tools other than bash** — it doesn't even use the tool-calling interface of the LMs.
-      This means that you can run it with literally any model.
-      When running in sandboxed environments you also don't need to take care of installing a single package — all it needs is bash.
-    - **Has a completely linear history** — every step of the agent just appends to the messages and that's it.
-      So there's no difference between the trajectory and the messages that you pass on to the LM.
-      Great for debugging & fine-tuning.
-    - **Executes actions with `subprocess.run`** — every action is completely independent (as opposed to keeping a stateful shell session running). This makes it trivial to execute the actions in sandboxes (literally just switch out `subprocess.run` with `docker exec`) and to scale up effortlessly.
-      Seriously, this is [a big deal](faq.md#why-no-shell-session), trust me.
-
-    This makes it perfect as a baseline system and for a system that puts the language model (rather than the agent scaffold) in the middle of our attention.
-    You can see the result on the [SWE-bench (bash only)](https://www.swebench.com/) leaderboard, that evaluates the performance of different LMs with `mini`.
-
-??? note "Why use mini-SWE-agent as a tool?"
-
-    Some agents are overfitted research artifacts. Others are UI-heavy frontend monsters.
-
-    The `mini` agent wants to be a hackable tool, not a black box.
-
-    - **Simple** enough to understand at a glance
-    - **Convenient** enough to use in daily workflows
-    - **Flexible** to extend
-
-    Unlike other agents (including our own [swe-agent](https://swe-agent.com/latest/)), it is radically simpler, because it:
-
-    - **Does not have any tools other than bash** — it doesn't even use the tool-calling interface of the LMs.
-      Instead of implementing custom tools for every specific thing the agent might want to do, the focus is fully on the LM utilizing the shell to its full potential.
-      Want it to do something specific like opening a PR?
-      Just tell the LM to figure it out rather than spending time to implement it in the agent.
-    - **Executes actions with `subprocess.run`** — every action is completely independent (as opposed to keeping a stateful shell session running).
-      This is [a big deal](https://mini-swe-agent.com/latest/faq/#why-no-shell-session) for the stability of the agent, trust me.
-    - **Has a completely linear history** — every step of the agent just appends to the messages that are passed to the LM in the next step and that's it.
-      This is great for debugging and understanding what the LM is prompted with.
-
-??? note "Should I use mini-SWE-agent or swe-agent?"
-
-    You should consider `mini-swe-agent` your default choice.
-    In particular, you should use `mini-swe-agent` if
-
-    - You want a quick command line tool that works locally
-    - You want an agent with a very simple control flow
-    - You want even faster, simpler & more stable sandboxing & benchmark evaluations
-    - You are doing FT or RL and don't want to overfit to a specific agent scaffold
-
-    You should use `swe-agent` if
-
-    - You want to experiment with different sets of tools, each with their own interface
-    - You want to experiment with different history processors
-
-    What you get with both
-
-    - Excellent performance on SWE-Bench
-    - A trajectory browser
-
-<table>
-<tr>
-<td width="50%">
-<a href="usage/mini"><strong>CLI</strong></a> (<code>mini</code>)
-</td>
-<td>
-<a href="usage/swebench/"><strong>Batch inference</strong></a>
-</td>
-</tr>
-<tr>
-<td width="50%">
-  <div class="gif-container" data-glightbox-disabled>
-    <img src="https://github.com/SWE-agent/swe-agent-media/blob/main/media/mini/png/mini.png?raw=true"
-         data-gif="https://github.com/SWE-agent/swe-agent-media/blob/main/media/mini/gif/mini.gif?raw=true"
-         alt="mini" data-glightbox="false" />
-  </div>
-</td>
-<td>
-<div class="gif-container" data-glightbox-disabled>
-  <img src="https://github.com/SWE-agent/swe-agent-media/blob/main/media/mini/png/swebench.png?raw=true"
-       data-gif="https://github.com/SWE-agent/swe-agent-media/blob/main/media/mini/gif/swebench.gif?raw=true"
-       alt="swebench" data-glightbox="false" />
-</div>
-</td>
-</tr>
-<tr>
-<td>
-<a href="usage/inspector/"><strong>Trajectory browser</strong></a>
-</td>
-<td>
-<a href="advanced/cookbook/"><strong>Python bindings</strong></a>
-</td>
-</tr>
-<tr>
-<td>
-<div class="gif-container" data-glightbox-disabled>
-  <img src="https://github.com/SWE-agent/swe-agent-media/blob/main/media/mini/png/inspector.png?raw=true"
-       data-gif="https://github.com/SWE-agent/swe-agent-media/blob/main/media/mini/gif/inspector.gif?raw=true"
-       alt="inspector" data-glightbox="false" />
-</div>
-</td>
-<td>
-<pre><code class="language-python">agent = DefaultAgent(
-    LitellmModel(model_name=...),
-    LocalEnvironment(),
-)
-agent.run("Write a sudoku game")</code></pre>
-</td>
-</tr>
-</table>
-
-
-!!! info "Upgrading to v2?"
-
-    Check out our [v2 migration guide](advanced/v2_migration.md) for all the changes and how to update your code.
-
-## Continue reading:
-
-<div class="grid cards">
-  <a href="quickstart/" class="nav-card-link">
-    <div class="nav-card">
-      <div class="nav-card-header">
-        <span class="material-icons nav-card-icon">launch</span>
-        <span class="nav-card-title">Installation & Quick Start</span>
-      </div>
-      <p class="nav-card-description">Get started with mini-SWE-agent</p>
-    </div>
-  </a>
-
-  <a href="usage/mini/" class="nav-card-link">
-    <div class="nav-card">
-      <div class="nav-card-header">
-        <span class="material-icons nav-card-icon">flash_on</span>
-        <span class="nav-card-title">Usage: Simple UI</span>
-      </div>
-      <p class="nav-card-description">Learn to use the <code>mini</code> command</p>
-    </div>
-  </a>
-
-  <a href="faq/" class="nav-card-link">
-    <div class="nav-card">
-      <div class="nav-card-header">
-        <span class="material-icons nav-card-icon">help</span>
-        <span class="nav-card-title">FAQ</span>
-      </div>
-      <p class="nav-card-description">Common questions and answers</p>
-    </div>
-  </a>
-
-  <a href="advanced/yaml_configuration/" class="nav-card-link">
-    <div class="nav-card">
-      <div class="nav-card-header">
-        <span class="material-icons nav-card-icon">settings</span>
-        <span class="nav-card-title">Configuration</span>
-      </div>
-      <p class="nav-card-description">Setup and customize your agent</p>
-    </div>
-  </a>
-
-  <a href="advanced/cookbook/" class="nav-card-link">
-    <div class="nav-card">
-      <div class="nav-card-header">
-        <span class="material-icons nav-card-icon">fitness_center</span>
-        <span class="nav-card-title">Power up</span>
-      </div>
-      <p class="nav-card-description">Start hacking the agent!</p>
-    </div>
-  </a>
-</div>
-
-## 📣 News
-
-* [mini-swe-agent now powers Ramp SWE-Bench](https://labs.ramp.com/swebench)
-* [mini-swe-agent beats Claude Code and Codex on DeepSWE](https://deepswe.datacurve.ai/blog#evaluation-harness)
-* [Run mini-swe-agent on our new & extremely challenging benchmark, ProgramBench](usage/programbench.md)
-* [New tutorial on building minimal AI agents](https://minimal-agent.com/)
-* Nov 19: [Gemini 3 Pro reaches 74% on SWE-bench verified with mini-swe-agent!](https://x.com/KLieret/status/1991164693839270372)
-* Aug 19: [New blogpost: Randomly switching between GPT-5 and Sonnet 4 boosts performance](https://www.swebench.com/post-250820-mini-roulette.html)
-
-## 📣 New features
-
-Please check the [github release notes](https://github.com/SWE-agent/mini-swe-agent/releases) for the latest updates.
-
-## 📣 Documentation updates
-
-* Jul 27: More notes on [local models](models/local_models.md)
-
-{% include-markdown "_footer.md" %}
+See [command-line usage](usage/mini.md), [control flow](advanced/control_flow.md), and the [API reference](reference/index.md) for details.

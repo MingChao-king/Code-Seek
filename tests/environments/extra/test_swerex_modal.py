@@ -2,11 +2,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytest.importorskip("swerex")
+
 from minisweagent.environments.extra.swerex_modal import (
     SwerexModalEnvironment,
     SwerexModalEnvironmentConfig,
 )
-from minisweagent.exceptions import Submitted
 
 
 def _make_env(**kwargs):
@@ -51,8 +52,8 @@ def test_swerex_modal_execute_accepts_dict_action():
     assert result["returncode"] == 0
 
 
-def test_swerex_modal_execute_raises_submitted():
-    """Test that execute() raises Submitted when output contains the submission marker."""
+def test_swerex_modal_treats_legacy_submission_marker_as_plain_output():
+    """The environment returns observations and never terminates the Agent."""
     env = _make_env()
 
     mock_output = MagicMock()
@@ -66,9 +67,7 @@ def test_swerex_modal_execute_raises_submitted():
     mock_deployment.runtime = mock_runtime
     env.deployment = mock_deployment
 
-    with pytest.raises(Submitted) as exc_info:
-        env.execute({"command": "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && git diff"})
-
-    msg = exc_info.value.messages[0]
-    assert msg["extra"]["exit_status"] == "Submitted"
-    assert "diff --git" in msg["extra"]["submission"]
+    result = env.execute({"command": "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && git diff"})
+    assert result["returncode"] == 0
+    assert "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" in result["output"]
+    assert "diff --git" in result["output"]

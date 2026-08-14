@@ -2,9 +2,9 @@
 
 ## Work locally (i.e., without a sandbox)
 
-* `hello_world.py` - Extremely simple example of how to use the `default.py` agent.
-* `mini.py` - Uses the `interactive.py` agent.
+* `hello_world.py` - Small Python example using the final `AssistantAgent`.
+* `mini.py` - Continuous terminal conversation with create/resume, approval, limits, and memory controls.
 
 ## Extras
 
-* `extra/swebench.py` - Benchmark the performance of the `default.py` agent.
+* `benchmarks/swebench.py` - Benchmark the same `AssistantAgent` through an event sink.
